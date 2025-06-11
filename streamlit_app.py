@@ -1,51 +1,65 @@
+
 import streamlit as st
 import datetime
 import pandas as pd
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="BlastTap: 고로 출선 매니저", layout="centered")
-st.title("🔥 BlastTap: 고로 출선 매니저 1.2 (안정배포형) 🔥")
+# 페이지 설정
+st.set_page_config(page_title="BlastTap 2.0", layout="centered")
+st.title("🔥 BlastTap: 고로 출선 매니저 2.0 (출선구 전환/누적조업, 모바일 최적화) 🔥")
 
-# 세션 상태 초기화
+# 세션 상태 초기화 (누적조업 관리)
 if 'log' not in st.session_state:
     st.session_state['log'] = []
+if 'lead_phi' not in st.session_state:
+    st.session_state['lead_phi'] = 45.0  # 초기 선행 비트경
+if 'follow_phi' not in st.session_state:
+    st.session_state['follow_phi'] = 45.0  # 초기 후행 비트경
 
-# ① 출선구 설정
-st.header("① 출선구 설정")
-lead_phi = st.number_input("선행 출선구 비트경 (Φ, mm)", min_value=30.0, value=45.0)
-follow_phi = st.number_input("후행 출선구 비트경 (Φ, mm)", min_value=30.0, value=45.0)
+# 실측 데이터 (고정 참고값)
+ol, os = 120.5, 44.6
+ore_charge_measured = ol + os
+coke_charge_measured = 33.5
+daily_production_measured = 12640.5
+measured_residual = 100.0
 
-# ② 출선조건 입력
-st.header("② 출선 조건 입력")
-tap_amount = st.number_input("1회 출선량 (ton)", value=1215.0)
-wait_time = st.number_input("출선 간격 (분)", value=15.0)
+# --------------------------------
+# 입력창 (사이드바 구성)
+# --------------------------------
+with st.sidebar:
+    st.header("조업 입력값")
 
-# ③ 출선 시작시각 입력
-st.header("③ 출선 시작 시각 입력")
-lead_start_time = st.time_input("선행 출선 시작 시각", value=datetime.time(10, 0))
-follow_start_time = st.time_input("후행 출선 시작 시각", value=datetime.time(10, 10))
+    # 비트경 전환은 세션에서 관리 (이번조업은 이전 후행구가 선행구로 자동이월됨)
+    st.write(f"이번 선행 출선구 비트경 (Φ): **{st.session_state['lead_phi']} mm**")
+    follow_phi_input = st.number_input("후행 출선구 비트경 (Φ, mm)", min_value=30.0, value=st.session_state['follow_phi'])
 
-# ④ 조업 데이터 입력
-st.header("④ 현장 조업 데이터 입력")
-ore_charge = st.number_input("1회 Ore 장입량 (ton)", value=165.1)
-coke_charge = st.number_input("1회 Coke 장입량 (ton)", value=33.5)
-daily_charge = st.number_input("일일 Charge 수", value=126)
-tfe_percent = st.number_input("T.Fe (%)", value=58.0)
-daily_production = st.number_input("일일생산량 (ton)", value=12500.0)
-reduction_ratio_actual = st.number_input("R.R (풍구앞, kg/T-P)", value=499.4)
-carbon_rate_actual = st.number_input("C.R (풍구앞, kg/T-P)", value=338.9)
-pcr_actual = st.number_input("PCR (kg/T-P)", value=167.6)
-slag_ratio = st.number_input("출선비 (용선:슬래그)", value=2.25)
-iron_speed_actual = st.number_input("실측 출선속도 (ton/min)", value=4.80)
-air_flow_actual = st.number_input("풍량 (Nm³/min)", value=7189.0)
-oxygen_injection_actual = st.number_input("산소부화량 (Nm³/hr)", value=36926.0)
+    # 출선량 분리 입력
+    lead_tap_amount = st.number_input("선행 출선량 (ton)", value=1150.0)
+    follow_tap_amount = st.number_input("후행 출선량 (ton)", value=350.0)
+    wait_time = st.number_input("출선 간격 (분)", value=15.0)
 
-# ⑤ 조업 상태 입력
-st.header("⑤ 현재 조업 상태")
-status = st.selectbox("조업 상태를 선택하세요", ["정상", "휴풍", "휴풍 후 재송풍", "정전"])
+    # 시작시각
+    lead_start_time = st.time_input("선행 출선 시작시각", value=datetime.time(10, 0))
+    follow_start_time = st.time_input("후행 출선 시작시각", value=datetime.time(10, 10))
 
-# 풍량 보정
-standard_air_flow = 7200
-speed_correction = air_flow_actual / standard_air_flow
+    # 현장데이터 (일부 실측 보정 적용)
+    ore_charge = st.number_input("Ore 장입량 (실측)", value=ore_charge_measured)
+    coke_charge = st.number_input("Coke 장입량 (실측)", value=coke_charge_measured)
+    daily_production = st.number_input("일일생산량 (실측)", value=daily_production_measured)
+    slag_ratio = st.number_input("출선비 (용선:슬래그)", value=2.25)
+    tfe_percent = st.number_input("T.Fe (%)", value=58.0)
+
+    # 출선속도 실측
+    lead_speed_actual = st.number_input("선행 출선속도 (ton/min)", value=4.8)
+    follow_speed_input = st.number_input("후행 출선속도 (ton/min)", value=4.5)
+    follow_speed_actual = min(follow_speed_input, 5.0)
+
+    # 조업상태
+    status = st.selectbox("조업 상태", ["정상", "휴풍", "휴풍 후 재송풍", "정전"])
+
+# --------------------------------
+# 본격 계산로직 시작
+# --------------------------------
 
 # 장입량 보정
 if status == '휴풍':
@@ -55,98 +69,90 @@ elif status == '정전':
 else:
     ore_charge_adj = ore_charge
 
-# 출선속도 계산
-k_calibrated = iron_speed_actual / (lead_phi ** 2)
-calc_K_lead = k_calibrated
-calc_K_follow = k_calibrated
+# 선행 초기 증량 보정
+initial_ramp_factor = 0.90
+lead_speed_corrected = lead_speed_actual * initial_ramp_factor
 
-lead_speed_est = calc_K_lead * lead_phi ** 2 * speed_correction
-follow_speed_est = calc_K_follow * follow_phi ** 2 * speed_correction
-dual_speed_est = lead_speed_est + follow_speed_est
-
-lead_time_est = tap_amount / lead_speed_est
-follow_time_est = tap_amount / follow_speed_est
-dual_time_est = tap_amount / dual_speed_est
+# 출선시간 계산
+lead_time_est = lead_tap_amount / lead_speed_corrected
+follow_time_est = follow_tap_amount / follow_speed_actual
+dual_time_est = (lead_tap_amount + follow_tap_amount) / (lead_speed_corrected + follow_speed_actual)
 
 # 종료시각 계산
-lead_start_dt = datetime.datetime.combine(datetime.date.today(), lead_start_time)
-follow_start_dt = datetime.datetime.combine(datetime.date.today(), follow_start_time)
-lead_end_time = lead_start_dt + datetime.timedelta(minutes=lead_time_est)
-follow_end_time = follow_start_dt + datetime.timedelta(minutes=150)
+today = datetime.date.today()
+lead_end_time = datetime.datetime.combine(today, lead_start_time) + datetime.timedelta(minutes=lead_time_est)
+follow_end_time = datetime.datetime.combine(today, follow_start_time) + datetime.timedelta(minutes=follow_time_est)
 
-# 저선량 계산
+# 누적 수지 기반 저선량 계산
+daily_charge = 126  # 고정
 total_ore = ore_charge_adj * daily_charge
 total_fe_input = total_ore * (tfe_percent / 100)
 reduction_ratio_calc = daily_production / total_fe_input if total_fe_input > 0 else 0
 
+predicted_iron_output = daily_production
 slag_amount = daily_production / slag_ratio
-furnace_total = daily_production + slag_amount
-current_residual_base = furnace_total * 0.05
+predicted_total_molten = predicted_iron_output + slag_amount
+total_tap_amount = lead_tap_amount + follow_tap_amount
 
-if status == '정상':
-    current_residual = current_residual_base
-elif status == '휴풍':
-    current_residual = current_residual_base + 10
-elif status == '휴풍 후 재송풍':
-    current_residual = current_residual_base + 20
-elif status == '정전':
-    current_residual = current_residual_base + 40
+current_residual_mass_balance = predicted_total_molten - total_tap_amount
+residual_rate = (current_residual_mass_balance / predicted_total_molten) * 100
+residual_gap = current_residual_mass_balance - measured_residual
 
-# 저선경보
-if current_residual >= 80:
-    next_follow_recommend = "⚠ 저선량 심각 → 즉시 후행출선 강력 권장"
-elif current_residual >= 60:
-    next_follow_recommend = "저선량 과다 → 즉시 후행출선 권장"
-else:
-    next_follow_recommend = f"선행출선속도 5ton/min 근접시 또는 최소 {wait_time}분 후 진행 권장"
-
-# 용융물 배출상태 평가
-if lead_speed_est < 3.5 or current_residual >= 80 or reduction_ratio_calc < 0.75:
-    melting_status = "⚠ 용융물 배출 불량 가능성"
-elif lead_speed_est < 4.0 or current_residual >= 70:
+# 배출상태 평가
+if residual_rate >= 9:
+    melting_status = "⚠ 용융물 배출 불량 경향"
+elif residual_rate >= 7:
     melting_status = "주의: 배출상태 점검 필요"
 else:
     melting_status = "✅ 용융물 배출 양호"
 
-# 결과 출력
-st.header("⑥ 출선 예측 결과")
-st.write(f"선행 출선속도: {lead_speed_est:.2f} ton/min (K={calc_K_lead:.5f}, Φ={lead_phi}mm, 풍량보정={speed_correction:.3f}) → 출선시간: {lead_time_est:.1f} 분")
-st.write(f"후행 출선속도: {follow_speed_est:.2f} ton/min → 출선시간: {follow_time_est:.1f} 분")
-st.write(f"출선 Lap 타임: {dual_time_est:.2f} 분")
-st.write(f"선행 종료시각: {lead_end_time.strftime('%H:%M:%S')}")
-st.write(f"후행 종료시각: {follow_end_time.strftime('%H:%M:%S')} (150분 고정 기준)")
+# 후행출선 종료 → 다음 선행구 전환
+st.session_state['lead_phi'] = follow_phi_input  # 후행구가 다음 선행구로 이월
+st.session_state['follow_phi'] = follow_phi_input  # 후행구 비트경 최신값 유지
 
-st.header("⑦ 저선량 및 환원제비 분석")
-st.write(f"조업 상태 보정 적용 예상 저선량: {current_residual:.1f} ton (기본:{current_residual_base:.1f} ton, 조업보정:+{current_residual-current_residual_base:.1f} ton)")
-st.write(f"예상 용선량: {daily_production:.1f} ton")
-st.write(f"예상 슬래그량: {slag_amount:.1f} ton")
-st.write(f"계산 환원제비 (R.R): {reduction_ratio_calc:.3f}")
-st.write(f"실측 환원제비 (R.R): {reduction_ratio_actual/1000:.3f}")
-st.write(f"탄소소비율 (C.R): {carbon_rate_actual/1000:.3f} ton/T-P")
-st.write(f"분탄주입율 (PCR): {pcr_actual/1000:.3f} ton/T-P")
+# --------------------------------
+# 결과 출력 (주요결과 강조출력)
+# --------------------------------
 
-st.header("⑧ 용융물 배출상태 평가")
-st.write(f"{melting_status} (속도:{lead_speed_est:.2f} ton/min, 저선:{current_residual:.1f} ton, R.R:{reduction_ratio_calc:.3f})")
-st.success(next_follow_recommend)
+st.subheader("⏱ 출선시간 예측")
+st.write(f"🟢 **선행출선시간:** {lead_time_est:.1f}분 → 종료: {lead_end_time.strftime('%H:%M:%S')}")
+st.write(f"🟢 **후행출선시간:** {follow_time_est:.1f}분 → 종료: {follow_end_time.strftime('%H:%M:%S')}")
 
-# 누적기록 저장
+st.subheader("📊 저선량 및 저선율 분석")
+st.markdown(f"<h3 style='color:orange'>누적 저선량 (예측): {current_residual_mass_balance:.1f} ton</h3>", unsafe_allow_html=True)
+st.markdown(f"<h3 style='color:green'>저선율: {residual_rate:.2f} %</h3>", unsafe_allow_html=True)
+st.write(f"실측 저선량: {measured_residual:.1f} ton (오차 {residual_gap:+.1f} ton)")
+
+st.subheader("🔎 용융물 수지 시각화")
+fig, ax = plt.subplots(figsize=(6, 4))
+labels = ["누적 생성량", "누적 출선량", "예측 저선량"]
+values = [predicted_total_molten, total_tap_amount, current_residual_mass_balance]
+bars = ax.bar(labels, values, color=['skyblue', 'salmon', 'lightgreen'])
+ax.set_ylabel("ton")
+for bar in bars:
+    yval = bar.get_height()
+    ax.text(bar.get_x() + bar.get_width()/2, yval + 5, f'{yval:.1f}', ha='center')
+st.pyplot(fig)
+
+st.subheader("⚠ 배출상태 진단")
+st.markdown(f"<h2 style='color:red'>{melting_status}</h2>", unsafe_allow_html=True)
+
+# 조업 누적 기록 저장
 record = {
     "시각": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    "조업상태": status,
-    "선행속도": round(lead_speed_est, 2),
-    "선행시간": round(lead_time_est, 1),
-    "후행속도": round(follow_speed_est, 2),
-    "후행시간": round(follow_time_est, 1),
-    "저선량": round(current_residual, 1),
-    "용선": round(daily_production, 1),
-    "슬래그": round(slag_amount, 1),
-    "환원제비": round(reduction_ratio_calc, 3),
+    "선행출선량": lead_tap_amount,
+    "후행출선량": follow_tap_amount,
+    "선행시간": lead_time_est,
+    "후행시간": follow_time_est,
+    "누적저선량": current_residual_mass_balance,
+    "저선율(%)": residual_rate,
+    "저선 오차": residual_gap,
     "배출상태": melting_status
 }
 st.session_state['log'].append(record)
 
-# 누적기록 테이블 및 다운로드
-st.header("⑨ 누적 조업 기록")
+# 누적 기록 출력
+st.subheader("📋 누적 조업 기록")
 df = pd.DataFrame(st.session_state['log'])
 st.dataframe(df)
 csv = df.to_csv(index=False).encode('utf-8-sig')
