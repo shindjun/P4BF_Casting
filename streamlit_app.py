@@ -3,8 +3,8 @@ import datetime
 import pandas as pd
 
 # 페이지 설정
-st.set_page_config(page_title="BlastTap 2.0", layout="centered")
-st.title("🔥 BlastTap: 고로 출선 매니저 2.0 (공취예상시간 통합판) 🔥")
+st.set_page_config(page_title="BlastTap 3.0", layout="centered")
+st.title("🔥 BlastTap 3.0: 출선실적 기반 누적저선 추적 통합판")
 
 # 세션 상태 초기화
 if 'log' not in st.session_state:
@@ -25,7 +25,7 @@ measured_residual = 100.0
 # 입력 (사이드바)
 # --------------------------------
 with st.sidebar:
-    st.header("조업 입력")
+    st.header("조업 기본 입력")
 
     st.write(f"이번 선행 출선구 비트경 (Φ): **{st.session_state['lead_phi']} mm**")
     follow_phi_input = st.number_input("후행 출선구 비트경 (Φ, mm)", min_value=30.0, value=st.session_state['follow_phi'])
@@ -61,6 +61,13 @@ with st.sidebar:
         auto_correction_factor = 1.036
 
     correction_factor = st.number_input("최종 보정계수 설정", value=auto_correction_factor)
+
+    st.markdown("---")
+    st.header("출선실적 입력 (누적저선 추적)")
+
+    # 출선실적 테이블 입력
+    tap_data = st.text_area("출선량 입력 (TAP별 TON, 콤마로 구분)", "1186, 1186, 1096, 1194, 1194, 1287, 1287, 988")
+    tap_list = [float(x.strip()) for x in tap_data.split(",") if x.strip()]
 
 # --------------------------------
 # 계산
@@ -99,8 +106,9 @@ reduction_ratio_calc = daily_production / total_fe_input if total_fe_input > 0 e
 predicted_iron_output = daily_production
 slag_amount = daily_production / slag_ratio
 predicted_total_molten = predicted_iron_output + slag_amount
-total_tap_amount = lead_tap_amount + follow_tap_amount
 
+# 🔧 누적배출량 기반 저선 추적
+total_tap_amount = sum(tap_list)
 current_residual_mass_balance = predicted_total_molten - total_tap_amount
 residual_rate = (current_residual_mass_balance / predicted_total_molten) * 100
 residual_gap = current_residual_mass_balance - measured_residual
@@ -123,21 +131,15 @@ st.subheader("⏱ 출선시간 예측")
 st.write(f"🟢 선행출선시간: {lead_time_est:.1f}분 → 종료: {lead_end_time.strftime('%H:%M:%S')}")
 st.write(f"🟢 후행출선시간: {follow_time_est:.1f}분 → 종료: {follow_end_time.strftime('%H:%M:%S')}")
 
-# 공취예상시간 출력 추가
 st.subheader("💨 선행 공취예상 시각")
 st.markdown(f"<h3 style='color:blue'>선행 공취예상: {lead_blowoff_dt.strftime('%H:%M:%S')} (95% 도달 시점)</h3>", unsafe_allow_html=True)
 
-st.subheader("📊 저선량 및 저선율")
-st.markdown(f"<h3 style='color:orange'>누적 저선량: {current_residual_mass_balance:.1f} ton</h3>", unsafe_allow_html=True)
+st.subheader("📊 누적저선량 추적")
+st.write(f"누적 생성량: {predicted_total_molten:.1f} ton")
+st.write(f"누적 배출량: {total_tap_amount:.1f} ton")
+st.markdown(f"<h3 style='color:orange'>현재 저선량: {current_residual_mass_balance:.1f} ton</h3>", unsafe_allow_html=True)
 st.markdown(f"<h3 style='color:green'>저선율: {residual_rate:.2f} %</h3>", unsafe_allow_html=True)
 st.write(f"실측 저선량: {measured_residual:.1f} ton (오차 {residual_gap:+.1f} ton)")
-
-st.subheader("🔎 용융물 수지 시각화")
-chart_data = pd.DataFrame({
-    '구분': ['누적 생성량', '누적 출선량', '예측 저선량'],
-    'ton': [predicted_total_molten, total_tap_amount, current_residual_mass_balance]
-}).set_index('구분')
-st.bar_chart(chart_data, height=400)
 
 st.subheader("⚠ 배출상태 진단")
 st.markdown(f"<h2 style='color:red'>{melting_status}</h2>", unsafe_allow_html=True)
@@ -145,14 +147,9 @@ st.markdown(f"<h2 style='color:red'>{melting_status}</h2>", unsafe_allow_html=Tr
 # 기록 저장
 record = {
     "시각": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    "선행출선량": lead_tap_amount,
-    "후행출선량": follow_tap_amount,
-    "선행시간": lead_time_est,
-    "후행시간": follow_time_est,
-    "공취예상시각": lead_blowoff_dt.strftime('%H:%M:%S'),
-    "누적저선량": current_residual_mass_balance,
+    "누적배출량": total_tap_amount,
+    "현재저선량": current_residual_mass_balance,
     "저선율(%)": residual_rate,
-    "저선 오차": residual_gap,
     "배출상태": melting_status
 }
 st.session_state['log'].append(record)
