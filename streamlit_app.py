@@ -114,22 +114,22 @@ st.header("🛠️ 조업 자동 추천")
 st.write(f"추천 출선비트경: **{tap_diameter} Ø**")
 st.write(f"추천 차기 출선간격: **{next_tap_interval}**")
 
-# 실시간 수지추적 그래프 (개선본)
+# 실시간 수지 시각화
 st.header("📊 실시간 수지추적 그래프")
 time_labels = [i for i in range(0, int(elapsed_minutes)+1, 60)]
 gen_series = [(ore_per_charge * charge_rate * (t/60)) * (tfe_percent/100) * reduction_eff_adj * (1+1/slag_ratio) for t in time_labels]
 tap_series = [total_real_tapped] * len(time_labels)
 residual_series = [max(g - total_real_tapped, 0) for g in gen_series]
 
-plt.figure(figsize=(10, 6))
-plt.plot(time_labels, gen_series, label="누적 생성량 (ton)", linewidth=2)
-plt.plot(time_labels, tap_series, label="누적 출선량 (ton)", linestyle="--", linewidth=2)
-plt.plot(time_labels, residual_series, label="저선량 (ton)", linestyle=":", linewidth=2)
-plt.xlabel("경과시간 (분)", fontsize=12)
-plt.ylabel("용융물량 (ton)", fontsize=12)
-plt.title("실시간 용융물 수지추적 그래프", fontsize=14, fontweight='bold')
+plt.figure(figsize=(8, 5))
+plt.plot(time_labels, gen_series, label="누적생성량")
+plt.plot(time_labels, tap_series, label="누적출선량")
+plt.plot(time_labels, residual_series, label="저선량")
+plt.xlabel("경과시간 (분)")
+plt.ylabel("ton")
+plt.title("실시간 용융물 수지추적")
 plt.legend()
-plt.grid(True)
+plt.grid()
 st.pyplot(plt)
 
 # 기록 저장
