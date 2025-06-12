@@ -4,7 +4,7 @@ import datetime
 import matplotlib.pyplot as plt
 
 # 페이지 설정
-st.set_page_config(page_title="BlastTap 5.9 Pro+ 현장적용판", layout="centered")
+st.set_page_config(page_title="BlastTap 5.9 Pro+ 현장적용 안정판", layout="centered")
 st.title("🔥 BlastTap 5.9 Pro+ 실시간 AI조업 수지추적")
 
 if 'log' not in st.session_state:
@@ -136,7 +136,7 @@ st.write(f"추천 출선비트경: **{tap_diameter} Ø**")
 st.write(f"추천 차기 출선간격: **{next_tap_interval}**")
 
 # ------------------------------
-# 실시간 수지 시각화
+# 실시간 수지 시각화 (범례 안정화)
 # ------------------------------
 st.header("📊 실시간 수지추적 그래프")
 time_labels = [i for i in range(0, int(elapsed_minutes)+1, 60)]
@@ -144,14 +144,14 @@ gen_series = [(ore_per_charge * (charge_rate if mode=="장입속도 기반 (자�
 tap_series = [total_real_tapped] * len(time_labels)
 residual_series = [max(g - total_real_tapped, 0) for g in gen_series]
 
-plt.figure(figsize=(8, 5))
-plt.plot(time_labels, gen_series, label="누적생성량")
-plt.plot(time_labels, tap_series, label="누적출선량")
-plt.plot(time_labels, residual_series, label="저선량")
+plt.figure(figsize=(8, 5), dpi=100)
+plt.plot(time_labels, gen_series, label="누적 생성량 (ton)")
+plt.plot(time_labels, tap_series, label="누적 출선량 (ton)")
+plt.plot(time_labels, residual_series, label="저선량 (ton)")
 plt.xlabel("경과시간 (분)")
 plt.ylabel("ton")
 plt.title("실시간 용융물 수지추적")
-plt.legend()
+plt.legend(loc='upper left')
 plt.grid()
 st.pyplot(plt)
 
