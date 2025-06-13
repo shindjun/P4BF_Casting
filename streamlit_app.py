@@ -77,4 +77,4 @@ lead_speed = st.sidebar.number_input("선행 출선속도 (ton/min)", value=4.8)
 follow_speed = st.sidebar.number_input("후행 출선속도 (ton/min)", value=4.8)
 lead_target = st.sidebar.number_input("선행 목표출선량 (ton)", value=1215.0)
 
-completed_taps = st.sidebar.number_input("종료된 TAP 수
+completed_taps = st.sidebar.number_input("종료된 TAP 수", value=5)
